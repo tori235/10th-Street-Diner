@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leads Admin — 10th Street Diner</title>
+<style>
+  :root { --bg:#1a1512; --panel:#241d18; --amber:#f5a623; --cream:#f1e9dd; --dim:#cabfae; --line:rgba(241,233,221,.14); --rust:#c1440e; }
+  * { box-sizing: border-box; }
+  body { background:var(--bg); color:var(--cream); font-family: 'IBM Plex Mono', 'Courier New', monospace; margin:0; padding:2rem 1.5rem 4rem; }
+  h1 { font-size:1.3rem; margin:0 0 1.2rem; }
+  .gate { max-width:360px; margin:4rem auto; text-align:center; }
+  .gate input { width:100%; padding:.7em .8em; border-radius:4px; border:1px solid var(--line); background:var(--panel); color:var(--cream); margin-bottom:.8rem; }
+  .gate button, .toolbar button { background:var(--amber); color:#1a1512; border:none; border-radius:4px; padding:.6em 1.1em; font-weight:600; cursor:pointer; font-family:inherit; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  th, td { text-align:left; padding:.6em .7em; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--dim); text-transform:uppercase; font-size:.72rem; letter-spacing:.05em; }
+  .badge { display:inline-block; padding:.15em .5em; border-radius:999px; font-size:.72rem; border:1px solid var(--line); }
+  .badge.new { color:var(--amber); border-color:var(--amber); }
+  .badge.contacted { color:var(--dim); }
+  .badge.closed { color:#7a9160; }
+  select { background:var(--panel); color:var(--cream); border:1px solid var(--line); border-radius:4px; padding:.3em; font-family:inherit; }
+  .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.2rem; gap:1rem; flex-wrap:wrap; }
+  .empty { color:var(--dim); padding:2rem 0; }
+  .error { color:var(--rust); }
+</style>
+</head>
+<body>
+
+<div id="gate" class="gate">
+  <h1>10th Street Diner — Leads</h1>
+  <input type="password" id="admin-key" placeholder="Admin key">
+  <button onclick="unlock()">View Leads</button>
+  <p id="gate-error" class="error"></p>
+</div>
+
+<div id="dashboard" style="display:none; max-width:1100px; margin:0 auto;">
+  <div class="toolbar">
+    <h1>Leads (<span id="count">0</span>)</h1>
+    <button onclick="load()">Refresh</button>
+  </div>
+  <table>
+    <thead>
+      <tr><th>When</th><th>Type</th><th>Name</th><th>Contact</th><th>Details</th><th>Status</th></tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p id="empty" class="empty" style="display:none;">No leads yet — once your site goes live, submissions from the Order Pad will show up here.</p>
+</div>
+
+<script>
+  const TYPE_LABEL = { text_club: 'Text Club', event: 'Event/Catering', question: 'Question' };
+
+  function unlock() {
+    const key = document.getElementById('admin-key').value.trim();
+    if (!key) return;
+    sessionStorage.setItem('adminKey', key);
+    load();
+  }
+
+  async function load() {
+    const key = sessionStorage.getItem('adminKey');
+    if (!key) return;
+    const res = await fetch('/api/leads', { headers: { 'x-admin-key': key } });
+    if (!res.ok) {
+      document.getElementById('gate-error').textContent = 'Invalid admin key.';
+      sessionStorage.removeItem('adminKey');
+      return;
+    }
+    const data = await res.json();
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('count').textContent = data.count;
+    document.getElementById('empty').style.display = data.count ? 'none' : 'block';
+
+    const rows = data.leads.map((l) => `
+      <tr>
+        <td>${new Date(l.created_at + 'Z').toLocaleString()}</td>
+        <td>${TYPE_LABEL[l.lead_type] || l.lead_type}</td>
+        <td>${escapeHtml(l.name)}</td>
+        <td>${escapeHtml(l.phone || '')}${l.phone && l.email ? '<br>' : ''}${escapeHtml(l.email || '')}</td>
+        <td>${[l.party_size ? 'Party: ' + l.party_size : '', l.preferred_date ? 'Date: ' + escapeHtml(l.preferred_date) : '', l.message ? escapeHtml(l.message) : ''].filter(Boolean).join('<br>')}</td>
+        <td><span class="badge ${l.status}">${l.status}</span></td>
+      </tr>
+    `).join('');
+    document.getElementById('rows').innerHTML = rows;
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  if (sessionStorage.getItem('adminKey')) load();
+</script>
+</body>
+</html>
